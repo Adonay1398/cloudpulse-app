@@ -1,0 +1,44 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  
+  jobs:
+    build-and-deploy:
+      runs-on: ubuntu-latest
+
+      steps:
+      - name: Checkout del codigo
+        uses: action/checkout@v4
+      
+      - name: Iniciar sesión en github container Registry
+        uses: docker/buil-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghrc.io/${{ github.repository_owner }}/cloudpulse-app:latest
+        
+      - name: Desplegar en KVM mediante SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST}}
+          username: ${{ secrets.VPS_USERNAME}}
+          key: ${{ secrets.VPS_KEY}}
+          script: |
+            mkdir -p /opt/cloudpulse
+            cat <<'EOF' > /opt/cloudpulse/docker-compose.yml
+            version: '3.8'
+            services:
+              app:
+                image: ghcr.io/{{github.repository_owner}}/cloudpulse-app:latest
+                container_name: cloudpulse_app
+                pots:
+                  - "3000:3000"
+
+            EOF
+            cd /opt/cloudpulse
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f
+                
